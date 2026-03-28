@@ -1,11 +1,5 @@
 data "aws_caller_identity" "current" {}
 
-# Try to get existing OIDC provider
-data "aws_iam_openid_connect_provider" "github" {
-  count = var.create_oidc_provider ? 0 : 1
-  url   = "https://token.actions.githubusercontent.com"
-}
-
 # Create OIDC provider if it doesn't exist
 resource "aws_iam_openid_connect_provider" "github" {
   count           = var.create_oidc_provider ? 1 : 0
@@ -48,7 +42,7 @@ resource "aws_iam_role" "github_actions" {
 }
 
 locals {
-  oidc_provider_arn = var.create_oidc_provider ? aws_iam_openid_connect_provider.github[0].arn : data.aws_iam_openid_connect_provider.github[0].arn
+  oidc_provider_arn = var.create_oidc_provider ? aws_iam_openid_connect_provider.github[0].arn : "arn:aws:iam::${data.aws_caller_identity.current.account_id}:oidc-provider/token.actions.githubusercontent.com"
   github_role_arn   = var.create_github_role ? aws_iam_role.github_actions[0].arn : data.aws_iam_role.github_actions[0].arn
   github_role_name  = var.create_github_role ? aws_iam_role.github_actions[0].name : data.aws_iam_role.github_actions[0].name
 }
