@@ -66,7 +66,11 @@ jobs:
     - name: Terraform Destroy
       run: |
         cd terraform
-        terraform destroy -input=false -auto-approve
+        terraform destroy -input=false -auto-approve \
+          -target=module.networking \
+          -target=module.security \
+          -target=module.ecr \
+          -target=module.ecs
 
     - name: Verify ECR cleanup
       run: |
