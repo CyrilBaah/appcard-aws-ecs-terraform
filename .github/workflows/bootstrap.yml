@@ -1,0 +1,68 @@
+name: Bootstrap Infrastructure
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "bootstrap" to create S3 backend and GitHub OIDC'
+        required: true
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.confirm == 'bootstrap'
+    env:
+      TF_IN_AUTOMATION: true
+      TF_INPUT: false
+      TF_VAR_project_name: ${{ vars.PROJECT_NAME }}
+      TF_VAR_aws_region: ${{ vars.AWS_REGION }}
+      TF_VAR_terraform_state_bucket: ${{ vars.TF_STATE_BUCKET }}
+      TF_VAR_github_repository: ${{ github.repository }}
+      TF_VAR_create_oidc_provider: true
+      TF_VAR_create_github_role: true
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ vars.TF_VERSION }}
+
+    - name: Configure AWS credentials (temporary)
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: ${{ vars.AWS_REGION }}
+
+    - name: Bootstrap S3 backend and OIDC
+      run: |
+        cd terraform/bootstrap
+        terraform init -input=false
+        terraform fmt -check -recursive
+        terraform validate
+
+        terraform import module.github_oidc.aws_iam_openid_connect_provider.github[0] arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:oidc-provider/token.actions.githubusercontent.com 2>/dev/null || echo "OIDC provider not found or already imported"
+        terraform import module.github_oidc.aws_iam_role.github_actions[0] ${{ vars.PROJECT_NAME }}-github-actions 2>/dev/null || echo "GitHub role not found or already imported"
+
+        terraform plan -input=false
+        terraform apply -auto-approve
+
+    - name: Show bootstrap info
+      run: |
+        cd terraform/bootstrap
+        S3_BUCKET=$(terraform output -raw s3_bucket_name)
+        ROLE_ARN=$(terraform output -raw github_actions_role_arn)
+        
+        echo "Bootstrap complete!"
+        echo "S3 Bucket: $S3_BUCKET"
+        echo "GitHub Role ARN: ${ROLE_ARN//${{ vars.AWS_ACCOUNT_ID }}/***MASKED***}"
+        echo ""
+        echo "IMPORTANT: Remove AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY secrets now!"
+        echo "All future workflows will use OIDC authentication"

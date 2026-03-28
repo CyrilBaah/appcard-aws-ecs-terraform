@@ -1,0 +1,81 @@
+name: Create Infrastructure
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "create" to confirm infrastructure creation'
+        required: true
+        default: ''
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  create-infra:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.confirm == 'create'
+    concurrency:
+      group: terraform-create-${{ github.ref }}
+      cancel-in-progress: false
+    env:
+      TF_IN_AUTOMATION: true
+      TF_INPUT: false
+      TF_VAR_project_name: ${{ vars.PROJECT_NAME }}
+      TF_VAR_aws_region: ${{ vars.AWS_REGION }}
+      TF_VAR_terraform_state_bucket: ${{ vars.TF_STATE_BUCKET }}
+      TF_VAR_terraform_state_key: ${{ vars.TF_STATE_KEY }}
+      TF_VAR_terraform_state_region: ${{ vars.AWS_REGION }}
+      TF_VAR_github_repository: ${{ github.repository }}
+      TF_VAR_create_oidc_provider: false
+      TF_VAR_create_github_role: false
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: ${{ vars.TF_VERSION }}
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/${{ vars.PROJECT_NAME }}-github-actions
+        aws-region: ${{ vars.AWS_REGION }}
+
+    - name: Terraform Init
+      run: |
+        cd terraform
+        terraform init -input=false \
+          -backend-config="bucket=${{ vars.TF_STATE_BUCKET }}" \
+          -backend-config="key=${{ vars.TF_STATE_KEY }}" \
+          -backend-config="region=${{ vars.AWS_REGION }}" \
+          -backend-config="encrypt=true" \
+          -backend-config="use_lockfile=true"
+
+    - name: Terraform Plan
+      run: |
+        cd terraform
+        terraform fmt -check -recursive
+        terraform validate
+        terraform plan -input=false -out=tfplan
+
+    - name: Terraform Apply
+      run: |
+        cd terraform
+        terraform apply -input=false -auto-approve tfplan
+
+    - name: Show infrastructure info
+      run: |
+        cd terraform
+        echo "Infrastructure created successfully!"
+        LB_DNS=$(terraform output -raw load_balancer_dns)
+        ECR_URL=$(terraform output -raw ecr_repository_url)
+        ROLE_ARN=$(terraform output -raw github_actions_role_arn)
+        
+        echo "Load Balancer: http://$LB_DNS"
+        echo "ECR Repository: ${ECR_URL//${{ vars.AWS_ACCOUNT_ID }}/***MASKED***}"
+        echo "GitHub Role ARN: ${ROLE_ARN//${{ vars.AWS_ACCOUNT_ID }}/***MASKED***}"
