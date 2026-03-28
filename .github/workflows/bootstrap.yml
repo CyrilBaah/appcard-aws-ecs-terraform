@@ -19,7 +19,7 @@ jobs:
       TF_IN_AUTOMATION: true
       TF_INPUT: false
       TF_VAR_project_name: ${{ vars.PROJECT_NAME }}
-      TF_VAR_aws_region: ${{ vars.AWS_REGION }}
+      TF_VAR_aws_region: ${{ secrets.AWS_REGION }}
       TF_VAR_terraform_state_bucket: ${{ vars.TF_STATE_BUCKET }}
       TF_VAR_github_repository: ${{ github.repository }}
       TF_VAR_create_oidc_provider: true
@@ -39,7 +39,7 @@ jobs:
       with:
         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ vars.AWS_REGION }}
+        aws-region: ${{ secrets.AWS_REGION }}
 
     - name: Bootstrap S3 backend and OIDC
       run: |
@@ -48,7 +48,7 @@ jobs:
         terraform fmt -check -recursive
         terraform validate
 
-        terraform import module.github_oidc.aws_iam_openid_connect_provider.github[0] arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:oidc-provider/token.actions.githubusercontent.com 2>/dev/null || echo "OIDC provider not found or already imported"
+        terraform import module.github_oidc.aws_iam_openid_connect_provider.github[0] arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:oidc-provider/token.actions.githubusercontent.com 2>/dev/null || echo "OIDC provider not found or already imported"
         terraform import module.github_oidc.aws_iam_role.github_actions[0] ${{ vars.PROJECT_NAME }}-github-actions 2>/dev/null || echo "GitHub role not found or already imported"
 
         terraform plan -input=false
@@ -62,7 +62,7 @@ jobs:
         
         echo "Bootstrap complete!"
         echo "S3 Bucket: $S3_BUCKET"
-        echo "GitHub Role ARN: ${ROLE_ARN//${{ vars.AWS_ACCOUNT_ID }}/***MASKED***}"
+        echo "GitHub Role ARN: ${ROLE_ARN//${{ secrets.AWS_ACCOUNT_ID }}/***MASKED***}"
         echo ""
         echo "IMPORTANT: Remove AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY secrets now!"
         echo "All future workflows will use OIDC authentication"
