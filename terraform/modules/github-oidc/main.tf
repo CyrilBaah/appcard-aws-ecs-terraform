@@ -90,6 +90,7 @@ resource "aws_iam_role_policy" "github_actions" {
           "ecr:GetDownloadUrlForLayer",
           "ecr:GetRepositoryPolicy",
           "ecr:InitiateLayerUpload",
+          "ecr:ListTagsForResource",
           "ecr:ListImages",
           "ecr:PutImage",
           "ecr:SetRepositoryPolicy",
@@ -138,6 +139,7 @@ resource "aws_iam_role_policy" "github_actions" {
       {
         Effect = "Allow"
         Action = [
+          "ec2:ModifyVpcAttribute",
           "ec2:CreateSecurityGroup",
           "ec2:DeleteSecurityGroup",
           "ec2:AuthorizeSecurityGroupIngress",
@@ -167,9 +169,15 @@ resource "aws_iam_role_policy" "github_actions" {
       {
         Effect = "Allow"
         Action = [
+          "logs:DescribeLogGroups"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
           "logs:CreateLogGroup",
           "logs:DeleteLogGroup",
-          "logs:DescribeLogGroups",
           "logs:PutRetentionPolicy",
           "logs:TagResource",
           "logs:UntagResource"
@@ -185,6 +193,7 @@ resource "aws_iam_role_policy" "github_actions" {
           "iam:PassRole",
           "iam:AttachRolePolicy",
           "iam:DetachRolePolicy",
+          "iam:GetRolePolicy",
           "iam:PutRolePolicy",
           "iam:DeleteRolePolicy",
           "iam:ListAttachedRolePolicies",
