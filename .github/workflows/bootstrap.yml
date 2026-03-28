@@ -48,8 +48,24 @@ jobs:
         terraform fmt -check -recursive
         terraform validate
 
-        terraform import module.github_oidc.aws_iam_openid_connect_provider.github[0] arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:oidc-provider/token.actions.githubusercontent.com 2>/dev/null || echo "OIDC provider not found or already imported"
-        terraform import module.github_oidc.aws_iam_role.github_actions[0] ${{ vars.PROJECT_NAME }}-github-actions 2>/dev/null || echo "GitHub role not found or already imported"
+        OIDC_ARN="arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:oidc-provider/token.actions.githubusercontent.com"
+        ROLE_NAME="${{ vars.PROJECT_NAME }}-github-actions"
+
+        if terraform state show module.github_oidc.aws_iam_openid_connect_provider.github[0] >/dev/null 2>&1; then
+          echo "OIDC provider already tracked in Terraform state"
+        elif aws iam get-open-id-connect-provider --open-id-connect-provider-arn "$OIDC_ARN" >/dev/null 2>&1; then
+          terraform import module.github_oidc.aws_iam_openid_connect_provider.github[0] "$OIDC_ARN"
+        else
+          echo "OIDC provider not found in AWS; Terraform will create it"
+        fi
+
+        if terraform state show module.github_oidc.aws_iam_role.github_actions[0] >/dev/null 2>&1; then
+          echo "GitHub Actions role already tracked in Terraform state"
+        elif aws iam get-role --role-name "$ROLE_NAME" >/dev/null 2>&1; then
+          terraform import module.github_oidc.aws_iam_role.github_actions[0] "$ROLE_NAME"
+        else
+          echo "GitHub Actions role not found in AWS; Terraform will create it"
+        fi
 
         terraform plan -input=false
         terraform apply -auto-approve
