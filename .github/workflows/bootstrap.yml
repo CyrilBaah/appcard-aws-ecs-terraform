@@ -48,6 +48,22 @@ jobs:
         terraform fmt -check -recursive
         terraform validate
 
+        STATE_BUCKET="${{ vars.TF_STATE_BUCKET }}"
+        OWNED_BUCKET=$(aws s3api list-buckets --query "Buckets[?Name=='$STATE_BUCKET'].Name | [0]" --output text)
+
+        if terraform state show module.bootstrap.aws_s3_bucket.terraform_state >/dev/null 2>&1; then
+          echo "State bucket already tracked in Terraform state"
+        elif [ "$OWNED_BUCKET" = "$STATE_BUCKET" ]; then
+          echo "State bucket exists in this account; importing"
+          terraform import module.bootstrap.aws_s3_bucket.terraform_state "$STATE_BUCKET"
+        elif aws s3api head-bucket --bucket "$STATE_BUCKET" >/dev/null 2>&1; then
+          echo "State bucket exists but is not owned by this account."
+          echo "Set a unique TF_STATE_BUCKET and rerun bootstrap."
+          exit 1
+        else
+          echo "State bucket does not exist; Terraform will create it"
+        fi
+
         OIDC_ARN="arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:oidc-provider/token.actions.githubusercontent.com"
         ROLE_NAME="${{ vars.PROJECT_NAME }}-github-actions"
 
