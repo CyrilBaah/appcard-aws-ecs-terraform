@@ -43,15 +43,26 @@ jobs:
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v4
       with:
-        role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ vars.PROJECT_NAME }}-github-actions
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
         aws-region: ${{ secrets.AWS_REGION }}
 
     - name: Stop ECS service for faster cleanup
       run: |
-        aws ecs update-service \
+        SERVICE_STATUS=$(aws ecs describe-services \
           --cluster ${{ vars.PROJECT_NAME }}-cluster \
-          --service ${{ vars.PROJECT_NAME }}-service \
-          --desired-count 0 || echo "ECS service not found or already stopped"
+          --services ${{ vars.PROJECT_NAME }}-service \
+          --query 'services[0].status' \
+          --output text 2>/dev/null || echo "MISSING")
+
+        if [ "$SERVICE_STATUS" = "ACTIVE" ]; then
+          aws ecs update-service \
+            --cluster ${{ vars.PROJECT_NAME }}-cluster \
+            --service ${{ vars.PROJECT_NAME }}-service \
+            --desired-count 0
+        else
+          echo "ECS service is not ACTIVE (status: $SERVICE_STATUS). Skipping scale-down."
+        fi
         sleep 30
 
     - name: Terraform Init
@@ -66,11 +77,7 @@ jobs:
     - name: Terraform Destroy
       run: |
         cd terraform
-        terraform destroy -input=false -auto-approve \
-          -target=module.networking \
-          -target=module.security \
-          -target=module.ecr \
-          -target=module.ecs
+        terraform destroy -input=false -auto-approve
 
     - name: Verify ECR cleanup
       run: |
